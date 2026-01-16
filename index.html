@@ -369,6 +369,9 @@
             <li><a href="#" onclick="showHome()">🏠 홈</a></li>
             <li><a href="#" onclick="showNotice()">📢 공지사항</a></li>
             <li><a href="#" onclick="showQNA()">❓ 질의응답</a></li>
+            <li id="adminMenu" class="hidden">
+                <button onclick="showUserManagement()" style="background-color: rgba(255, 255, 255, 0.3);">⚙️ 회원 관리</button>
+            </li>
             <li id="userMenu" class="hidden">
                 <span id="userName"></span>
                 <button onclick="logout()">로그아웃</button>
@@ -457,6 +460,18 @@
         <h1>❓ 질의응답</h1>
         <div id="qnaList"></div>
         <button id="qnaPostBtn" class="btn btn-primary" onclick="openPostModal('qna')" style="display: none; margin-top: 20px;">질문하기</button>
+    </div>
+
+    <!-- 관리자 페이지 -->
+    <div id="adminPage" class="hidden container">
+        <h1>⚙️ 회원 관리</h1>
+        <div style="margin-bottom: 20px;">
+            <button class="btn btn-primary" onclick="showAllUsers()">전체 회원</button>
+            <button class="btn btn-primary" onclick="showStudents()">학생</button>
+            <button class="btn btn-primary" onclick="showParents()">학부모</button>
+            <button class="btn btn-danger" onclick="deleteAllUsers()" style="background-color: #ff6b6b; margin-left: 20px;">모든 회원 삭제</button>
+        </div>
+        <div id="userList" style="margin-top: 20px;"></div>
     </div>
 
     <!-- 로그인 모달 -->
@@ -630,6 +645,7 @@
         const updateUI = () => {
             const userMenu = document.getElementById('userMenu');
             const authMenu = document.getElementById('authMenu');
+            const adminMenu = document.getElementById('adminMenu');
             const startSection = document.getElementById('startSection');
             const welcomeMsg = document.getElementById('welcomeMsg');
             
@@ -638,14 +654,25 @@
                 authMenu.classList.add('hidden');
                 const roleBadge = currentUser.isAdmin ? ' 👑 (관리자)' : ` (${currentUser.roleDisplay})`;
                 document.getElementById('userName').textContent = `👤 ${currentUser.name}님${roleBadge}`;
+                
+                // 관리자 메뉴 표시
+                if (currentUser.isAdmin && adminMenu) {
+                    adminMenu.classList.remove('hidden');
+                } else if (adminMenu) {
+                    adminMenu.classList.add('hidden');
+                }
+                
                 startSection.classList.add('hidden');
-                welcomeMsg.innerHTML = `✨ <strong>${currentUser.name}님 환영합니다! 건강한 생활을 응원합니다!</strong>`;
+                welcomeMsg.innerHTML = `✨ <strong>${currentUser.name}님 환영합니다! ${currentUser.isAdmin ? '관리자로 로그인되었습니다!' : '건강한 생활을 응원합니다!'}</strong>`;
                 welcomeMsg.className = 'alert alert-success';
                 document.getElementById('noticePostBtn').style.display = 'block';
                 document.getElementById('qnaPostBtn').style.display = 'block';
             } else {
                 userMenu.classList.add('hidden');
                 authMenu.classList.remove('hidden');
+                if (adminMenu) {
+                    adminMenu.classList.add('hidden');
+                }
                 startSection.classList.remove('hidden');
                 document.getElementById('noticePostBtn').style.display = 'none';
                 document.getElementById('qnaPostBtn').style.display = 'none';
@@ -675,6 +702,11 @@
         // Google 로그인
         const handleGoogleLogin = (response) => {
             try {
+                if (!response.credential) {
+                    alert('Google 로그인 정보를 가져올 수 없습니다. Google Cloud Console 설정을 확인해주세요.');
+                    return;
+                }
+                
                 const token = response.credential;
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 
@@ -902,12 +934,14 @@
             document.getElementById('mainContent').classList.remove('hidden');
             document.getElementById('noticePage').classList.add('hidden');
             document.getElementById('qnaPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.add('hidden');
         };
 
         const showNotice = () => {
             document.getElementById('mainContent').classList.add('hidden');
             document.getElementById('noticePage').classList.remove('hidden');
             document.getElementById('qnaPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.add('hidden');
             loadNotice();
         };
 
@@ -915,7 +949,20 @@
             document.getElementById('mainContent').classList.add('hidden');
             document.getElementById('noticePage').classList.add('hidden');
             document.getElementById('qnaPage').classList.remove('hidden');
+            document.getElementById('adminPage').classList.add('hidden');
             loadQNA();
+        };
+
+        const showUserManagement = () => {
+            if (!currentUser || !currentUser.isAdmin) {
+                alert('관리자만 접근 가능합니다.');
+                return;
+            }
+            document.getElementById('mainContent').classList.add('hidden');
+            document.getElementById('noticePage').classList.add('hidden');
+            document.getElementById('qnaPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.remove('hidden');
+            showAllUsers();
         };
 
         // 게시물 로드
@@ -941,6 +988,81 @@
                 </div>
             `).join('') : '<p style="text-align: center; color: #999;">질문이 없습니다.</p>';
             document.getElementById('qnaList').innerHTML = html;
+        };
+
+        // 관리자 함수 - 회원 관리
+        const showAllUsers = () => {
+            const users = JSON.parse(localStorage.getItem('users'));
+            const nonAdminUsers = users.filter(u => !u.isAdmin);
+            displayUsers(nonAdminUsers, '전체 회원');
+        };
+
+        const showStudents = () => {
+            const users = JSON.parse(localStorage.getItem('users'));
+            const students = users.filter(u => u.role === 'student' && !u.isAdmin);
+            displayUsers(students, '학생');
+        };
+
+        const showParents = () => {
+            const users = JSON.parse(localStorage.getItem('users'));
+            const parents = users.filter(u => u.role === 'parent' && !u.isAdmin);
+            displayUsers(parents, '학부모');
+        };
+
+        const displayUsers = (users, title) => {
+            const html = users.length > 0 ? `
+                <h3>${title} (${users.length}명)</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                    <thead>
+                        <tr style="background-color: #f0f0f0; border-bottom: 2px solid #ddd;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">이름</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">이메일</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">전화번호</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">역할</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${users.map(user => `
+                            <tr style="border-bottom: 1px solid #ddd;">
+                                <td style="padding: 10px; border: 1px solid #ddd;">${user.name}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${user.email}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${user.phone}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${user.roleDisplay}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+                                    <button onclick="deleteUser('${user.email}')" style="background-color: #ff6b6b; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">삭제</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            ` : `<p style="text-align: center; color: #999;">${title}이 없습니다.</p>`;
+            document.getElementById('userList').innerHTML = html;
+        };
+
+        const deleteUser = (email) => {
+            if (email === currentUser.email) {
+                alert('자신의 계정은 삭제할 수 없습니다.');
+                return;
+            }
+            
+            if (confirm(`${email} 계정을 삭제하시겠습니까?`)) {
+                let users = JSON.parse(localStorage.getItem('users'));
+                users = users.filter(u => u.email !== email);
+                localStorage.setItem('users', JSON.stringify(users));
+                alert('회원이 삭제되었습니다.');
+                showAllUsers();
+            }
+        };
+
+        const deleteAllUsers = () => {
+            if (confirm('관리자 계정을 제외한 모든 회원을 삭제하시겠습니까?')) {
+                let users = JSON.parse(localStorage.getItem('users'));
+                const adminUsers = users.filter(u => u.isAdmin);
+                localStorage.setItem('users', JSON.stringify(adminUsers));
+                alert('모든 회원이 삭제되었습니다.');
+                showAllUsers();
+            }
         };
 
         // 모달 외부 클릭 시 닫기
